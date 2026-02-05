@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Liquid Glass Notes — Icon Pack Manager (Zip generator)</title>
+<style>
+  :root{
+    --glass-bg: rgba(255,255,255,0.62);
+    --glass-border: rgba(255,255,255,0.5);
+    --glass-blur: blur(22px);
+    --accent: #3b82f6;
+    --text: #111216;
+    --muted: #8b8b92;
+    --radius-md: 12px;
+    --shadow: 0 10px 30px rgba(16,24,40,0.12);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent; user-select:none}
+  html,body{height:100%;margin:0;font-family:Inter, -apple-system, "SF Pro Text", "Helvetica Neue", Arial; color:var(--text)}
+  body{
+    background:
+      radial-gradient(600px 300px at 10% 10%, rgba(59,130,246,0.06), transparent 15%),
+      radial-gradient(400px 250px at 85% 85%, rgba(99,102,241,0.04), transparent 12%),
+      linear-gradient(180deg, #f6f7fb 0%, #eef2ff 100%);
+    min-height:100%;
+  }
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+  }
+  #app { height:100vh; display:flex; flex-direction:column; padding:18px; gap:16px; }
+  .main { display:flex; gap:16px; align-items:stretch; flex:1; min-height:0; }
+  .sidebar { width:84px; display:flex; flex-direction:column; gap:12px; }
+  .canvas-wrap { flex:1; border-radius:18px; overflow:hidden; display:flex; flex-direction:column; min-height:0; background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.35)); border:1px solid rgba(255,255,255,0.5); }
+  .draw-header { display:flex;align-items:center;justify-content:space-between;padding:10px 12px; gap:8px; }
+  .draw-controls { display:flex; gap:8px; align-items:center; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background: rgba(255,255,255,0.56); border:1px solid rgba(255,255,255,0.6); font-size:13px; color:var(--text); }
+  .canvas-area { background: linear-gradient(180deg, #fff, #fafbff); flex:1; min-height:0; display:flex; align-items:center; justify-content:center; position:relative; }
+  #canvasContainer { flex:1; min-height:0; position:relative; width:100%; height:100%; }
+  canvas { width:100%; height:100%; display:block; touch-action:none; cursor:crosshair; }
+  .tool-btn { display:flex; align-items:center; justify-content:center; width:56px;height:56px;border-radius:12px;cursor:pointer;transition:all 160ms ease;position:relative; background: linear-gradient(180deg, rgba(255,255,255,0.48), rgba(255,255,255,0.28)); border: 1px solid rgba(255,255,255,0.6); box-shadow: 0 6px 18px rgba(16,24,40,0.06), inset 0 1px 0 rgba(255,255,255,0.65); }
+  .tool-btn img, .tool-btn svg { width:22px; height:22px; display:block; }
+  .tool-btn.active { background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 50%, white)); box-shadow: 0 12px 24px rgba(59,130,246,0.22); color:#fff; }
+  .tool-btn:active { transform: translateY(1px) scale(0.99); }
+  .small { font-size:12px; color:var(--muted) }
+  @media (max-width:900px){ .main{flex-direction:column} .sidebar{flex-direction:row;width:auto;padding:8px;justify-content:flex-start} .tool-btn{width:44px;height:44px} }
+  #dev-ops { font-size:13px; padding:10px; border-radius:10px; background:rgba(0,0,0,0.02); color:var(--muted); max-width:900px; margin-top:8px; }
+  #dev-ops summary { cursor:pointer; font-weight:700; color:var(--text); }
+  .icon-img { display:block; width:22px; height:22px; object-fit:contain; }
+  .pack-preview { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .pack-preview .p { width:48px; height:48px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.04); border-radius:8px; }
+  .editor-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  textarea.icon-editor { width:100%; height:120px; font-family:monospace; font-size:12px; padding:8px; border-radius:6px; border:1px solid rgba(0,0,0,0.06); background:white; }
+  .btn { padding:8px 10px; border-radius:8px; border:none; cursor:pointer; background:var(--accent); color:white; }
+  .muted-btn { background:transparent; border:1px solid rgba(0,0,0,0.06); color:var(--text); padding:8px 10px; border-radius:8px; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <header class="appbar glass" role="banner" style="display:flex;align-items:center;padding:10px 12px;border-radius:14px;">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:800">LG</div>
+        <div style="font-weight:700">Liquid Glass Notes</div>
+      </div>
+      <div style="flex:1"></div>
+      <div class="small">Generate a downloadable sample icon-pack ZIP (no external libs)</div>
+    </header>
+
+    <section class="main" role="main">
+      <aside class="sidebar" aria-label="Tools">
+        <div class="tool-btn active" data-icon="move" title="Move" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="brush" title="Brush" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="eraser" title="Eraser" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="lasso" title="Lasso" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="pen" title="Pen" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="text" title="Text" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="rect" title="Rectangle" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+        <div class="tool-btn" data-icon="picker" title="Eyedropper" onclick="onToolBtn(this)"><span class="icon-placeholder"></span></div>
+      </aside>
+
+      <div class="canvas-wrap glass">
+        <div class="draw-header">
+          <div class="draw-controls">
+            <div class="pill">Tool: <strong id="tool-label">Move</strong></div>
+            <div class="pill">Color: <input type="color" id="color" value="#000000" style="border:none;background:transparent;width:36px;height:26px;border-radius:8px"></div>
+            <div class="pill small">Size: <input id="size" type="range" min="1" max="60" value="4" style="width:120px"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="pill" onclick="undo()">Undo</button>
+            <button class="pill" onclick="redo()">Redo</button>
+            <button class="pill" onclick="saveDrawing()">Save</button>
+          </div>
+        </div>
+
+        <div class="canvas-area">
+          <div id="canvasContainer" style="flex:1; min-height:0; position:relative;">
+            <canvas id="canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <aside class="right" style="width:320px; display:flex; flex-direction:column; gap:12px;">
+        <div class="layers glass" style="padding:12px">
+          <div style="font-weight:700">Layers</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <div style="display:flex;justify-content:space-between;padding:8px;border-radius:8px;background:rgba(0,0,0,0.03)">Background <span class="small">locked</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px;border-radius:8px;background:rgba(0,0,0,0.03)">Layer 1 <span class="small">visible</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px;border-radius:8px;background:rgba(0,0,0,0.03)">Layer 2 <span class="small">hidden</span></div>
+          </div>
+        </div>
+
+        <details id="dev-ops" open class="glass" style="padding:12px">
+          <summary>Icon Pack Manager — sample pack generator (no JSZip required)</summary>
+
+          <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button class="btn" id="download-sample-pack">Download sample pack (.zip)</button>
+            <button class="muted-btn" id="preview-svgs">Open SVG preview</button>
+            <div class="small" style="margin-left:8px">The ZIP produced uses STORE (no compression) for compatibility and is generated entirely in-browser.</div>
+          </div>
+
+          <div class="small" style="margin-top:8px;">
+            Pack contents (filenames): move.svg, brush.svg, eraser.svg, lasso.svg, pen.svg, text.svg, rect.svg, picker.svg
+          </div>
+
+          <div class="pack-preview" id="pack-preview" aria-hidden="true" style="margin-top:10px;"></div>
+        </details>
+      </aside>
+    </section>
+
+    <footer class="nav glass" style="padding:8px; border-radius:10px;">
+      <div class="small">Icon pack generator: produces a standard ZIP file you can upload into the app.</div>
+    </footer>
+  </div>
+
+  <!-- inline svg sprite fallback -->
+  <svg style="display:none">
+    <symbol id="icon-move" viewBox="0 0 24 24"><path d="M5 9l7-7 7 7h-4v6h-6V9H5zM5 20v-2h14v2H5z"/></symbol>
+    <symbol id="icon-brush" viewBox="0 0 24 24"><path d="M7 16c-1 0-2 .5-3 1.4V20h8v-2.6c-1-.9-2-1.4-3-1.4zM21.7 6.3c.4-.4.4-1 0-1.4L19.1 2.3c-.4-.4-1-.4-1.4 0L14 6l4.5 4.5 3.2-4.2zM3 17l4-4 5 5-4 4H3v-5z"/></symbol>
+    <symbol id="icon-eraser" viewBox="0 0 24 24"><path d="M16.24 3h-6.49a2 2 0 0 0-1.42.59L3.59 8.33a2 2 0 0 0 0 2.83l6.34 6.34a2 2 0 0 0 2.83 0l5.14-5.14a2 2 0 0 0 0-2.83l-4.69-4.69A2 2 0 0 0 16.24 3z"/></symbol>
+    <symbol id="icon-lasso" viewBox="0 0 24 24"><path d="M12 2c-2.2 0-4 1.8-4 4 0 1.3.6 2.4 1.5 3.1L4 18l7 4 5.5-5.5c.7.9 1.8 1.5 3.1 1.5 2.2 0 4-1.8 4-4s-1.8-4-4-4h-1.5c-.8-2.2-3-3.8-5.6-3.8z"/></symbol>
+    <symbol id="icon-pen" viewBox="0 0 24 24"><path d="M2 22l4-1 12-12 1-4L16 2 4 14 2 22zM14 4l2 2-2 2-2-2 2-2z"/></symbol>
+    <symbol id="icon-text" viewBox="0 0 24 24"><path d="M5 4h4l3 12h1l3-12h4v2h-2l-1.1 5H8.1L7 6H5V4z"/></symbol>
+    <symbol id="icon-rect" viewBox="0 0 24 24"><path d="M3 5v14c0 1.1.9 2 2 2h14V3H5c-1.1 0-2 .9-2 2z"/></symbol>
+    <symbol id="icon-picker" viewBox="0 0 24 24"><path d="M20.7 5.3l-2-2a1 1 0 0 0-1.4 0L5 15.6V19h3.4L20.7 6.7a1 1 0 0 0 0-1.4zM7 18H6v-1l8.6-8.6 1 1L7 18z"/></symbol>
+  </svg>
+
+<script>
+/*
+  Client-side ZIP generator (no external libs).
+  - Produces a standard ZIP file using STORED (no compression) method.
+  - Works for small text files (SVGs) easily.
+  - Adds local file headers, central directory, and end record.
+  - Uses CRC32 computed in JS.
+*/
+
+const SAMPLE_SVGS = {
+  "move.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 9l7-7 7 7h-4v6h-6V9H5zM5 20v-2h14v2H5z"/></svg>`,
+  "brush.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M7 16c-1 0-2 .5-3 1.4V20h8v-2.6c-1-.9-2-1.4-3-1.4zM21.7 6.3c.4-.4.4-1 0-1.4L19.1 2.3c-.4-.4-1-.4-1.4 0L14 6l4.5 4.5 3.2-4.2zM3 17l4-4 5 5-4 4H3v-5z"/></svg>`,
+  "eraser.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16.24 3h-6.49a2 2 0 0 0-1.42.59L3.59 8.33a2 2 0 0 0 0 2.83l6.34 6.34a2 2 0 0 0 2.83 0l5.14-5.14a2 2 0 0 0 0-2.83l-4.69-4.69A2 2 0 0 0 16.24 3z"/></svg>`,
+  "lasso.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2c-2.2 0-4 1.8-4 4 0 1.3.6 2.4 1.5 3.1L4 18l7 4 5.5-5.5c.7.9 1.8 1.5 3.1 1.5 2.2 0 4-1.8 4-4s-1.8-4-4-4h-1.5c-.8-2.2-3-3.8-5.6-3.8z"/></svg>`,
+  "pen.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 22l4-1 12-12 1-4L16 2 4 14 2 22zM14 4l2 2-2 2-2-2 2-2z"/></svg>`,
+  "text.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 4h4l3 12h1l3-12h4v2h-2l-1.1 5H8.1L7 6H5V4z"/></svg>`,
+  "rect.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 5v14c0 1.1.9 2 2 2h14V3H5c-1.1 0-2 .9-2 2z"/></svg>`,
+  "picker.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.7 5.3l-2-2a1 1 0 0 0-1.4 0L5 15.6V19h3.4L20.7 6.7a1 1 0 0 0 0-1.4zM7 18H6v-1l8.6-8.6 1 1L7 18z"/></svg>`
+};
+
+// CRC32 table builder
+function makeCrcTable() {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      if (c & 1) c = 0xedb88320 ^ (c >>> 1);
+      else c = c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+}
+const CRC_TABLE = makeCrcTable();
+
+function crc32(buf) {
+  let crc = 0 ^ (-1);
+  for (let i = 0; i < buf.length; i++) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xff];
+  }
+  return (crc ^ (-1)) >>> 0;
+}
+
+// string -> UTF-8 bytes
+function encodeUTF8(str) {
+  return new TextEncoder().encode(str);
+}
+
+function uint32ToLE(n) {
+  return new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]);
+}
+function uint16ToLE(n) {
+  return new Uint8Array([n & 0xff, (n >>> 8) & 0xff]);
+}
+
+// Build a ZIP (STORE method = 0) from a mapping filename -> Uint8Array/data
+function buildZip(files) {
+  const localFileRecords = [];
+  const centralDirectoryRecords = [];
+  let offset = 0;
+
+  for (const filename of Object.keys(files)) {
+    const data = (files[filename] instanceof Uint8Array) ? files[filename] : encodeUTF8(files[filename]);
+    const fnameBytes = encodeUTF8(filename);
+    const crc = crc32(data);
+    const compressedSize = data.length;
+    const uncompressedSize = data.length;
+    const fileNameLength = fnameBytes.length;
+
+    // Local file header
+    // local file header signature     4 bytes  (0x04034b50)
+    // version needed to extract       2 bytes
+    // general purpose bit flag        2 bytes
+    // compression method              2 bytes
+    // last mod file time              2 bytes
+    // last mod file date              2 bytes
+    // crc-32                          4 bytes
+    // compressed size                 4 bytes
+    // uncompressed size               4 bytes
+    // file name length                2 bytes
+    // extra field length              2 bytes
+
+    const localHeader = new Uint8Array(30 + fileNameLength + data.length);
+    let p = 0;
+    // signature
+    localHeader.set([0x50,0x4b,0x03,0x04], p); p += 4;
+    // version needed to extract (2.0)
+    localHeader.set(uint16ToLE(20), p); p += 2;
+    // gp bit flag
+    localHeader.set(uint16ToLE(0), p); p += 2;
+    // compression method (0 = store)
+    localHeader.set(uint16ToLE(0), p); p += 2;
+    // mod time & date (set 0)
+    localHeader.set(uint16ToLE(0), p); p += 2;
+    localHeader.set(uint16ToLE(0), p); p += 2;
+    // crc32
+    localHeader.set(uint32ToLE(crc), p); p += 4;
+    // compressed size
+    localHeader.set(uint32ToLE(compressedSize), p); p += 4;
+    // uncompressed size
+    localHeader.set(uint32ToLE(uncompressedSize), p); p += 4;
+    // file name length
+    localHeader.set(uint16ToLE(fileNameLength), p); p += 2;
+    // extra length
+    localHeader.set(uint16ToLE(0), p); p += 2;
+    // file name
+    localHeader.set(fnameBytes, p); p += fileNameLength;
+    // file data
+    localHeader.set(data, p); p += data.length;
+
+    localFileRecords.push(localHeader);
+
+    // Central directory header for this file
+    // central file header signature   4 bytes  (0x02014b50)
+    // version made by                 2 bytes
+    // version needed to extract       2 bytes
+    // general purpose bit flag        2 bytes
+    // compression method              2 bytes
+    // last mod file time              2 bytes
+    // last mod file date              2 bytes
+    // crc-32                          4 bytes
+    // compressed size                 4 bytes
+    // uncompressed size               4 bytes
+    // file name length                2 bytes
+    // extra field length              2 bytes
+    // file comment length             2 bytes
+    // disk number start               2 bytes
+    // internal file attributes        2 bytes
+    // external file attributes        4 bytes
+    // relative offset of local header 4 bytes
+
+    const centralHeader = new Uint8Array(46 + fileNameLength);
+    p = 0;
+    centralHeader.set([0x50,0x4b,0x01,0x02], p); p += 4;
+    // version made by
+    centralHeader.set(uint16ToLE(20), p); p += 2;
+    // version needed
+    centralHeader.set(uint16ToLE(20), p); p += 2;
+    // gp flag
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // compression method
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // mod time/date
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // crc32
+    centralHeader.set(uint32ToLE(crc), p); p += 4;
+    // sizes
+    centralHeader.set(uint32ToLE(compressedSize), p); p += 4;
+    centralHeader.set(uint32ToLE(uncompressedSize), p); p += 4;
+    // name len
+    centralHeader.set(uint16ToLE(fileNameLength), p); p += 2;
+    // extra len
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // file comment len
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // disk number start
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // internal attrs
+    centralHeader.set(uint16ToLE(0), p); p += 2;
+    // external attrs
+    centralHeader.set(uint32ToLE(0), p); p += 4;
+    // relative offset of local header
+    centralHeader.set(uint32ToLE(offset), p); p += 4;
+    // file name
+    centralHeader.set(fnameBytes, p); p += fileNameLength;
+
+    centralDirectoryRecords.push(centralHeader);
+
+    // update offset: size of local header + data (we already included data)
+    offset += localHeader.length;
+  }
+
+  // assemble final blob: concatenate local file records, central dir records, and end record
+  const parts = [];
+  for (const rec of localFileRecords) parts.push(rec);
+  const centralStart = offset;
+  let centralSize = 0;
+  for (const c of centralDirectoryRecords) { parts.push(c); centralSize += c.length; }
+  const centralEnd = centralStart + centralSize;
+
+  // End of central directory record (22 bytes + comment)
+  // end signature 4 bytes (0x06054b50)
+  // number of this disk 2 bytes
+  // number of the disk with the start of the central directory 2 bytes
+  // total number of entries in the central dir on this disk 2 bytes
+  // total number of entries in the central dir 2 bytes
+  // size of the central directory 4 bytes
+  // offset of start of central directory with respect to the starting disk number 4 bytes
+  // .ZIP file comment length 2 bytes
+
+  const eocd = new Uint8Array(22);
+  let p = 0;
+  eocd.set([0x50,0x4b,0x05,0x06], p); p += 4;
+  eocd.set(uint16ToLE(0), p); p += 2; // disk number
+  eocd.set(uint16ToLE(0), p); p += 2; // disk with central dir
+  eocd.set(uint16ToLE(centralDirectoryRecords.length), p); p += 2; // entries on this disk
+  eocd.set(uint16ToLE(centralDirectoryRecords.length), p); p += 2; // total entries
+  eocd.set(uint32ToLE(centralSize), p); p += 4; // size of central dir
+  eocd.set(uint32ToLE(centralStart), p); p += 4; // offset of start
+  eocd.set(uint16ToLE(0), p); p += 2; // comment length
+
+  parts.push(eocd);
+
+  // concat into single Uint8Array
+  let totalLen = 0;
+  for (const part of parts) totalLen += part.length;
+  const out = new Uint8Array(totalLen);
+  let offsetWrite = 0;
+  for (const part of parts) {
+    out.set(part, offsetWrite);
+    offsetWrite += part.length;
+  }
+  return out;
+}
+
+// Trigger download of the sample pack zip (no external libs)
+function downloadSamplePack() {
+  // Build files with UTF-8 SVG content
+  const files = {};
+  for (const name of Object.keys(SAMPLE_SVGS)) {
+    files[name] = SAMPLE_SVGS[name];
+  }
+  const zipBytes = buildZip(files);
+  const blob = new Blob([zipBytes], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sample-icon-pack.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Preview SVGs in a popup for convenience
+function openSvgPreview() {
+  const w = window.open('', '_blank', 'noopener,noreferrer');
+  if (!w) return alert('Popup blocked - allow popups and try again.');
+  w.document.title = 'SVG Pack Preview';
+  const style = `<style>body{font-family:Inter,system-ui;display:flex;flex-wrap:wrap;gap:12px;padding:18px} .card{width:140px;height:140px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:1px solid #eee;padding:12px;background:white}</style>`;
+  let html = '<!doctype html><html><head>' + style + '</head><body>';
+  for (const name of Object.keys(SAMPLE_SVGS)) {
+    html += `<div class="card">${SAMPLE_SVGS[name]}</div>`;
+  }
+  html += '</body></html>';
+  w.document.write(html);
+  w.document.close();
+}
+
+// wire UI
+document.getElementById('download-sample-pack').addEventListener('click', downloadSamplePack);
+document.getElementById('preview-svgs').addEventListener('click', openSvgPreview);
+
+/* Minimal rest of app logic to keep UI functional (icon rendering and drawing) */
+
+// Some utility functions reused by the app (render icons from sprite)
+function renderSpriteIcon(btn, mapped){
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#icon-${mapped}`);
+  svg.appendChild(use);
+  btn.innerHTML = '';
+  btn.appendChild(svg);
+}
+function renderAllIcons(){
+  document.querySelectorAll('.tool-btn').forEach(btn => {
+    const iconKey = btn.dataset.icon;
+    renderSpriteIcon(btn, iconKey);
+  });
+}
+function onToolBtn(el){
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const title = el.title || el.dataset.icon || 'tool';
+  document.getElementById('tool-label').textContent = title;
+  setToolByName(el.dataset.icon);
+}
+
+/* small drawing engine (same as previous) */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: true });
+const container = document.getElementById('canvasContainer');
+const colorInput = document.getElementById('color');
+const sizeInput = document.getElementById('size');
+let currentTool = 'move';
+let drawing = false;
+let lastX=0, lastY=0;
+let history = [], idx=-1, MAX=40;
+
+function fitCanvas(){
+  const r = container.getBoundingClientRect();
+  const cssW = Math.max(300, Math.floor(r.width));
+  const cssH = Math.max(200, Math.floor(r.height));
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  const ratio = devicePixelRatio || 1;
+  canvas.width = Math.floor(cssW * ratio);
+  canvas.height = Math.floor(cssH * ratio);
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  if (idx >= 0 && history[idx]) loadFromDataURL(history[idx]);
+}
+function setToolByName(name){
+  currentTool = name || 'move';
+  canvas.style.cursor = currentTool === 'move' ? 'grab' : 'crosshair';
+  document.getElementById('tool-label').textContent = name;
+}
+
+function getPoint(e){
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+  const clientY = e.clientY ?? (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+function startDraw(e){ if (currentTool === 'move') return; drawing = true; const p = getPoint(e); lastX = p.x; lastY = p.y; ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = Number(sizeInput.value || 4); ctx.strokeStyle = currentTool === 'eraser' ? '#fff' : (colorInput.value || '#000'); e.preventDefault(); }
+function draw(e){ if(!drawing) return; const p = getPoint(e); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y; }
+function endDraw(){ if(!drawing) return; drawing = false; ctx.closePath(); pushHistory(); }
+function pushHistory(){ try{ const data = canvas.toDataURL(); if (idx < history.length -1) history = history.slice(0, idx+1); history.push(data); if(history.length > MAX) history.shift(); idx = history.length -1; }catch(e){ console.warn(e) } }
+function loadFromDataURL(d){ const img = new Image(); img.onload = ()=> { ctx.clearRect(0,0,canvas.width,canvas.height); const ratio = devicePixelRatio || 1; ctx.drawImage(img, 0, 0, canvas.width/ratio, canvas.height/ratio); }; img.src = d; }
+function undo(){ if(idx > 0){ idx--; loadFromDataURL(history[idx]); } else { ctx.clearRect(0,0,canvas.width,canvas.height); idx = -1; } }
+function redo(){ if(idx < history.length -1){ idx++; loadFromDataURL(history[idx]); } }
+function saveDrawing(){ const url = canvas.toDataURL('image/png'); const notes = JSON.parse(localStorage.getItem('glass_notes')||'[]'); notes.unshift({ type:'sketch', title:'Sketch '+(notes.length+1), content:url, date:new Date().toLocaleDateString()}); localStorage.setItem('glass_notes', JSON.stringify(notes)); alert('Sketch saved to local storage'); }
+function clearCanvas(){ ctx.clearRect(0,0,canvas.width,canvas.height); pushHistory(); }
+
+const supportsPointer = !!window.PointerEvent;
+if (supportsPointer) {
+  canvas.addEventListener('pointerdown', startDraw);
+  canvas.addEventListener('pointermove', draw);
+  window.addEventListener('pointerup', endDraw);
+  window.addEventListener('pointercancel', endDraw);
+} else {
+  canvas.addEventListener('mousedown', startDraw);
+  window.addEventListener('mousemove', draw);
+  window.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('touchstart', startDraw, {passive:false});
+  canvas.addEventListener('touchmove', draw, {passive:false});
+  canvas.addEventListener('touchend', endDraw);
+}
+
+colorInput.addEventListener('input', ()=>{ if(currentTool !== 'eraser') ctx.strokeStyle = colorInput.value; });
+sizeInput.addEventListener('input', ()=>{ ctx.lineWidth = Number(sizeInput.value); });
+
+window.addEventListener('load', ()=>{
+  renderAllIcons();
+  fitCanvas();
+  pushHistory();
+  const active = document.querySelector('.tool-btn.active');
+  if(active) setToolByName(active.dataset.icon);
+});
+window.addEventListener('resize', ()=>{
+  const prev = canvas.toDataURL();
+  fitCanvas();
+  if (idx >= 0) loadFromDataURL(prev);
+});
+
+</script>
+</body>
+</html>
