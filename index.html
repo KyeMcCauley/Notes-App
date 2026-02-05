@@ -275,145 +275,127 @@
 </div>
 
 <script>
-    // --- APP STATE ---
+    // --- 1. APP STATE & STORAGE ---
+    // This loads your saved notes immediately when the app opens
+    let notes = JSON.parse(localStorage.getItem('glass_notes')) || [];
     let currentTool = 'pen';
     let currentColor = '#000000';
     let isDrawing = false;
-    
-    // --- NAVIGATION ---
+
+    // --- 2. NAVIGATION & RENDERING ---
     function switchTab(tabId) {
-        // Hide all views
         document.querySelectorAll('.view-page').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
         
-        // Show target view
         document.getElementById(tabId + '-view').classList.add('active');
         
-        // Update nav icon (Simple matching logic)
+        // Update nav icons
         const buttons = document.querySelectorAll('.nav-item');
-        if(tabId === 'home') buttons[0].classList.add('active');
+        if(tabId === 'home') { buttons[0].classList.add('active'); renderNotes(); }
         if(tabId === 'note') buttons[1].classList.add('active');
-        if(tabId === 'draw') {
-            buttons[2].classList.add('active');
-            resizeCanvas(); // Ensure canvas fits
-        }
+        if(tabId === 'draw') { buttons[2].classList.add('active'); resizeCanvas(); }
         if(tabId === 'camera') buttons[3].classList.add('active');
     }
 
-    // --- DRAWING ENGINE ---
+    // This function draws your saved notes onto the Home Screen
+    function renderNotes() {
+        const grid = document.querySelector('.note-grid');
+        grid.innerHTML = ''; // Clear current grid
+
+        notes.forEach((note, index) => {
+            const card = document.createElement('div');
+            card.className = 'glass-panel note-card';
+            
+            // If it's a drawing, show a "Sketch" label; otherwise show content
+            const preview = note.type === 'sketch' ? '🎨 Drawing' : note.content.substring(0, 30) + '...';
+            
+            card.innerHTML = `
+                <div onclick="deleteNote(${index})" style="position:absolute; top:10px; right:10px; font-size:12px; opacity:0.5;">✕</div>
+                <div onclick="openNote(${index})">
+                    <h3 style="margin:0 0 5px 0">${note.title || 'Untitled'}</h3>
+                    <small style="color:var(--text-light)">${preview}</small>
+                </div>
+                <small>${note.date}</small>
+            `;
+            grid.appendChild(card);
+        });
+    }
+
+    // --- 3. SAVING LOGIC ---
+    function saveTextNote() {
+        const title = document.querySelector('#note-view input').value;
+        const content = document.querySelector('#note-view textarea').value;
+
+        if(!title && !content) return; // Don't save empty notes
+
+        const newNote = {
+            type: 'text',
+            title: title || 'New Note',
+            content: content,
+            date: new Date().toLocaleDateString()
+        };
+
+        notes.unshift(newNote); // Put newest at the top
+        syncStorage();
+        switchTab('home');
+        
+        // Clear inputs for next time
+        document.querySelector('#note-view input').value = '';
+        document.querySelector('#note-view textarea').value = '';
+    }
+
+    function saveDrawing() {
+        const canvas = document.getElementById('main-canvas');
+        const dataURL = canvas.toDataURL(); // Converts drawing to a "photo" string
+
+        const newSketch = {
+            type: 'sketch',
+            title: 'Sketch ' + (notes.length + 1),
+            content: dataURL,
+            date: new Date().toLocaleDateString()
+        };
+
+        notes.unshift(newSketch);
+        syncStorage();
+        alert("Sketch Saved!");
+        switchTab('home');
+        clearCanvas();
+    }
+
+    function deleteNote(index) {
+        if(confirm("Delete this note?")) {
+            notes.splice(index, 1);
+            syncStorage();
+            renderNotes();
+        }
+    }
+
+    function syncStorage() {
+        localStorage.setItem('glass_notes', JSON.stringify(notes));
+    }
+
+    // --- 4. DRAWING ENGINE (RE-INITIALIZED) ---
     const canvas = document.getElementById('main-canvas');
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('canvas-container');
-    
     let startX, startY, snapshot;
 
     function resizeCanvas() {
         canvas.width = container.offsetWidth;
         canvas.height = container.offsetHeight;
     }
-    
-    // Tool Selection
-    function setTool(toolName) {
-        currentTool = toolName;
-        document.querySelectorAll('.tool-icon').forEach(el => el.classList.remove('active'));
-        // Find icon by title (simple helper)
-        const icons = document.querySelectorAll('.tool-icon');
-        for(let icon of icons) {
-            if(icon.title.toLowerCase().includes(toolName)) {
-                icon.classList.add('active');
-            }
-        }
+
+    // ... (Keep the rest of your drawing events/logic from the previous code) ...
+
+    function clearCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    function setColor(color) {
-        currentColor = color;
-    }
-
-    // Drawing Events
-    canvas.addEventListener('touchstart', startDraw, {passive: false});
-    canvas.addEventListener('touchmove', moveDraw, {passive: false});
-    canvas.addEventListener('touchend', endDraw);
-    canvas.addEventListener('mousedown', startDraw);
-    canvas.addEventListener('mousemove', moveDraw);
-    canvas.addEventListener('mouseup', endDraw);
-
-    function getPos(e) {
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: clientX - rect.left, y: clientY - rect.top };
-    }
-
-    function startDraw(e) {
-        if(currentTool === 'move') return;
-        isDrawing = true;
-        const pos = getPos(e);
-        startX = pos.x;
-        startY = pos.y;
-        
-        ctx.lineWidth = 3;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = currentColor;
-        ctx.fillStyle = currentColor;
-        
-        snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        if(currentTool === 'pen' || currentTool === 'eraser') {
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-        } else if (currentTool === 'fill') {
-            floodFill(startX, startY, currentColor);
-            isDrawing = false;
-        } else if (currentTool === 'text') {
-            let t = prompt("Enter Text:");
-            if(t) ctx.fillText(t, startX, startY);
-            isDrawing = false;
-        }
-    }
-
-    function moveDraw(e) {
-        if(!isDrawing) return;
-        e.preventDefault(); // Stop scrolling
-        const pos = getPos(e);
-
-        if(currentTool === 'pen' || currentTool === 'eraser') {
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-        } else if (['rect', 'circle', 'line', 'arrow'].includes(currentTool)) {
-            ctx.putImageData(snapshot, 0, 0); // Clear preview
-            ctx.beginPath();
-            if(currentTool === 'rect') {
-                ctx.strokeRect(startX, startY, pos.x - startX, pos.y - startY);
-            } else if (currentTool === 'circle') {
-                let r = Math.sqrt(Math.pow(pos.x - startX, 2) + Math.pow(pos.y - startY, 2));
-                ctx.arc(startX, startY, r, 0, 2 * Math.PI);
-                ctx.stroke();
-            } else if (currentTool === 'line') {
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(pos.x, pos.y);
-                ctx.stroke();
-            }
-        }
-    }
-
-    function endDraw() {
-        isDrawing = false;
-        ctx.globalCompositeOperation = 'source-over';
-    }
-
-    // --- UTILS: FLOOD FILL ---
-    function floodFill(x, y, color) {
-        // Simplified fill logic for demo stability
-        alert("Drop-to-fill triggered! (Full algorithm simplified for single-file performance)");
-        ctx.fillRect(0,0, canvas.width, canvas.height); // Fills BG as demo
-    }
-
-    // Init
-    window.addEventListener('load', () => {
-        resizeCanvas();
+    // Initialize the app
+    window.onload = () => {
+        renderNotes();
         switchTab('home');
-    });
+    };
 </script>
 </body>
 </html>
